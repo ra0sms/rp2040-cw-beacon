@@ -26,3 +26,6 @@ venv/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Prebuilt firmware binaries ARE tracked
+!firmware/*.uf2

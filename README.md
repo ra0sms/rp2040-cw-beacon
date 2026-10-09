@@ -12,6 +12,7 @@ The firmware generates an audio telegraph tone on one GPIO, controls transmitter
 - **Tone sequences** — an arbitrary chain of tone bursts ("freq:ms" pairs, `0` = silence), transmittable instead of (or after) the Morse message
 - **Transmission modes** — `cw` (Morse only), `tones` (tone sequence only), or `both` (Morse, then tones) within one PTT
 - **Non-volatile configuration** — stored in the last sector of the onboard flash; survives power-off and reflashing
+- **Ready-to-flash firmware** — a prebuilt `.uf2` binary is included in [`firmware/`](firmware/), no toolchain required
 - **USB console** — live configuration over the USB CDC serial port
 - **Status LED** — onboard WS2812 (GP16) blinks every 500 ms
 
@@ -27,6 +28,24 @@ The firmware generates an audio telegraph tone on one GPIO, controls transmitter
 > Connect the tone output to the transmitter's audio/modulation input (use an attenuator or level shifter if required by your radio) and the PTT output to the transmitter's PTT input, sharing a common ground. The CW key output drives the transmitter's built-in keyer input through an external transistor (e.g. 2N2222 / IRLML6402 depending on key input polarity): GPIO → 1k resistor → transistor base, key line on the collector/emitter side. The key is closed while the tone sounds (dots/dashes in CW mode, active entries of the tone sequence).
 
 ![Waveshare RP2040-Zero pinout](pics/rp2040_zero_pinout.png)
+
+## Flashing
+
+A prebuilt firmware binary is included in the repository: [`firmware/Beacon-v0.1.uf2`](firmware/Beacon-v0.1.uf2). You do not need to build anything to flash it.
+
+**Method 1 — BOOTSEL button:**
+
+1. Hold the BOOT button and connect the board via USB.
+2. The board appears as a USB mass-storage device (`RPI-RP2`).
+3. Copy the firmware: `cp firmware/Beacon-v0.1.uf2 /run/media/$USER/RPI-RP2/`
+
+**Method 2 — picotool (no button required):**
+
+```bash
+picotool load firmware/Beacon-v0.1.uf2 -fx
+```
+
+If the currently running firmware does not support USB reboot, use the BOOTSEL button method.
 
 ## Configuration commands (USB console)
 
@@ -62,29 +81,58 @@ tones 800:150 0:100 800:150 0:100 1200:150 0:500
 save
 ```
 
-## Building
+## Building from source
 
-The project uses the [Raspberry Pi Pico SDK](https://github.com/raspberrypi/pico-sdk) (developed with SDK 2.3.1) and CMake.
+If you want to modify the firmware, build it yourself. The project uses:
+
+- **[Raspberry Pi Pico SDK](https://github.com/raspberrypi/pico-sdk)** 2.3.1 (developed with this version; other 2.x versions likely work)
+- **CMake** ≥ 3.13
+- **ARM GCC cross-toolchain** — `arm-none-eabi-gcc` (the SDK 2.x toolchain package `15_2_Rel1` or any recent version)
+- **Ninja** or GNU Make (Ninja is recommended)
+
+### Installing the toolchain
+
+**Fedora / RHEL:**
 
 ```bash
-cmake -B build -S .
-cmake --build build
+sudo dnf install arm-none-eabi-gcc-cs arm-none-eabi-newlib cmake ninja-build
+git clone -b 2.3.1 https://github.com/raspberrypi/pico-sdk.git ~/pico-sdk
+export PICO_SDK_PATH=~/pico-sdk   # add to ~/.bashrc or ~/.zshrc
 ```
 
-The firmware binary is produced at `build/Beacon.uf2`.
+**Debian / Ubuntu:**
 
-## Flashing
+```bash
+sudo apt install gcc-arm-none-eabi libnewlib-arm-none-eabi libstdc++-arm-none-eabi-newlib cmake ninja-build
+git clone -b 2.3.1 https://github.com/raspberrypi/pico-sdk.git ~/pico-sdk
+export PICO_SDK_PATH=~/pico-sdk   # add to ~/.bashrc
+```
+
+Alternatively, install the official **Raspberry Pi Pico VS Code extension** — it manages the SDK, toolchain, ninja and picotool automatically (in `~/.pico-sdk`); the project's VS Code configuration in [`code/Beacon/.vscode/`](code/Beacon/.vscode/) is prepared for it.
+
+### Building
+
+```bash
+cmake -B code/Beacon/build -S code/Beacon
+cmake --build code/Beacon/build
+```
+
+The firmware binary is produced at `code/Beacon/build/Beacon.uf2`.
+
+`picotool` (for USB flashing without the BOOTSEL button) is bundled with the VS Code extension, or can be built from [pico-sdk-tools](https://github.com/raspberrypi/picotool) / installed as `picotool` package on recent distros. Without it, use the BOOTSEL button method below.
+
+### Flashing the built firmware
 
 **Method 1 — BOOTSEL button:**
 
 1. Hold the BOOT button and connect the board via USB.
 2. The board appears as a USB mass-storage device (`RPI-RP2`).
-3. Copy the firmware: `cp build/Beacon.uf2 /run/media/$USER/RPI-RP2/`
+3. Copy the firmware: `cp code/Beacon/build/Beacon.uf2 /run/media/$USER/RPI-RP2/`
 
 **Method 2 — picotool (no button required):**
 
 ```bash
-picotool load build/Beacon.uf2 -fx
+picotool load code/Beacon/build/Beacon.uf2 -fx
 ```
 
 If the currently running firmware does not support USB reboot, use the BOOTSEL button method.
