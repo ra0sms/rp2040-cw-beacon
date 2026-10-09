@@ -1,0 +1,28 @@
+# Build outputs
+build/
+code/Beacon/build/
+*.elf
+*.bin
+*.hex
+*.uf2
+*.map
+*.dis
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Qt / GUI artifacts
+*.pyqt
+
+# IDE / editor
+.idea/
+*.swp
+*~
+
+# OS files
+.DS_Store
+Thumbs.db

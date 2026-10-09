@@ -1,0 +1,5 @@
+# Python dependencies for the Beacon GUI (gui/beacon_gui.py)
+# Install:  pip install -r requirements.txt
+
+pyserial>=3.5
+PyQt5>=5.15
