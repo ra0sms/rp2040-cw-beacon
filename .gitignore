@@ -29,3 +29,9 @@ Thumbs.db
 
 # Prebuilt firmware binaries ARE tracked
 !firmware/*.uf2
+
+# KiCad autosave/backup artifacts
+KiCad/**/*-backups/
+KiCad/**/*.lck
+KiCad/**/*.bak
+KiCad/**/*.kicad_prl

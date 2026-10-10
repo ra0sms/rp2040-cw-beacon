@@ -141,6 +141,8 @@ If the currently running firmware does not support USB reboot, use the BOOTSEL b
 
 A PyQt5/PyQt6 desktop GUI is available for convenient configuration and monitoring: [`gui/beacon_gui.py`](gui/beacon_gui.py).
 
+**Windows users:** a standalone build that needs no Python installation is available: [`gui/beacon_gui.exe`](gui/beacon_gui.exe) — just download and run. On first launch the SmartScreen may warn about an unsigned binary; choose "More info" → "Run anyway".
+
 Install the Python dependencies:
 
 ```bash
