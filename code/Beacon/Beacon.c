@@ -21,8 +21,6 @@
 #define PTT_LEAD_MS       100  // PTT lead-in delay before transmission, ms
 #define PTT_TAIL_MS       100  // PTT tail delay after transmission, ms
 
-#define LED_TOGGLE_INTERVAL_MS 500
-
 // ============================================================
 //  Beacon configuration (stored in flash, editable via USB console)
 // ============================================================
@@ -103,16 +101,30 @@ static void config_save(void)
 }
 
 // ============================================================
-//  Status LED (WS2812) - blinking by timer
+//  Status LED (WS2812)
+//  - during transmission: red, blinking in sync with the keying
+//    (red while the tone/key sounds, off in the gaps)
+//  - during the pause: steady green
 // ============================================================
-static volatile bool led_state = false;
+static volatile bool tx_active = false;
 
-static bool led_timer_callback(struct repeating_timer *t)
+#define LED_COLOR_RED   PICO_COLORED_STATUS_LED_COLOR_FROM_RGB(255, 0, 0)
+#define LED_COLOR_GREEN PICO_COLORED_STATUS_LED_COLOR_FROM_RGB(0, 255, 0)
+
+static void led_tx_on(void)   // keyed: red
 {
-    (void)t;
-    led_state = !led_state;
-    status_led_set_state(led_state);
-    return true;
+    colored_status_led_set_on_with_color(LED_COLOR_RED);
+}
+
+static void led_gap_off(void) // gap during transmission: dark
+{
+    if (tx_active)
+        colored_status_led_set_state(false);
+}
+
+static void led_idle_on(void) // pause / idle: steady green
+{
+    colored_status_led_set_on_with_color(LED_COLOR_GREEN);
 }
 
 // ============================================================
@@ -330,6 +342,7 @@ static void tone_start(uint32_t freq_hz)
     pwm_set_chan_level(tone_slice, tone_chan, (wrap + 1) / 2); // 50% duty cycle
     pwm_set_enabled(tone_slice, true);
     key_set(true); // CW key follows the tone (keyed while tone sounds)
+    led_tx_on();   // status LED: red while keyed
 }
 
 static void tone_stop(void)
@@ -340,6 +353,10 @@ static void tone_stop(void)
     gpio_set_function(TONE_PIN, GPIO_FUNC_SIO);
     gpio_set_dir(TONE_PIN, GPIO_OUT);
     gpio_put(TONE_PIN, false);
+    if (tx_active)
+        led_gap_off(); // dark in the gaps while transmitting
+    else
+        led_idle_on(); // steady green when not transmitting
 }
 
 // ============================================================
@@ -481,10 +498,9 @@ int main()
     gpio_set_dir(TONE_PIN, GPIO_OUT);
     gpio_put(TONE_PIN, false);
 
-    // Status LED: blink every 500 ms
+    // Status LED: steady green until transmission starts
     status_led_init();
-    struct repeating_timer led_timer;
-    add_repeating_timer_ms(-LED_TOGGLE_INTERVAL_MS, led_timer_callback, NULL, &led_timer);
+    led_idle_on();
 
     config_load();
     printf("Type 'help' for commands\n");
@@ -493,6 +509,7 @@ int main()
         printf("TX: %s\n", cfg.tx_mode == MODE_TONES ? cfg.tones : cfg.msg);
         ptt_set(true);
         sleep_ms_poll(PTT_LEAD_MS);
+        tx_active = true; // LED: red, blinking with the keying
         if (cfg.tx_mode == MODE_CW || cfg.tx_mode == MODE_BOTH) {
             send_message();
             if (cfg.tx_mode == MODE_BOTH)
@@ -501,8 +518,10 @@ int main()
         if (cfg.tx_mode == MODE_TONES || cfg.tx_mode == MODE_BOTH) {
             play_tones();
         }
+        tx_active = false;
         sleep_ms_poll(PTT_TAIL_MS);
         ptt_set(false);
+        led_idle_on(); // steady green during the pause
         printf("TX done, pause %u s\n", cfg.pause_s);
 
         // Pause between messages while keeping the console responsive

@@ -14,7 +14,7 @@ The firmware generates an audio telegraph tone on one GPIO, controls transmitter
 - **Non-volatile configuration** — stored in the last sector of the onboard flash; survives power-off and reflashing
 - **Ready-to-flash firmware** — a prebuilt `.uf2` binary is included in [`firmware/`](firmware/), no toolchain required
 - **USB console** — live configuration over the USB CDC serial port
-- **Status LED** — onboard WS2812 (GP16) blinks every 500 ms
+- **Status LED** — onboard WS2812 (GP16): steady green in the pause, red blinking in sync with the keying during transmission
 
 ## Hardware
 
