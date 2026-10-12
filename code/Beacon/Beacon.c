@@ -36,7 +36,7 @@
 // Transmission mode
 enum { MODE_CW = 0, MODE_TONES = 1, MODE_BOTH = 2 };
 
-#define CONFIG_MAGIC    0xBEAC0AC2u
+#define CONFIG_MAGIC    0xBEAC0AC3u
 
 typedef struct {
     uint32_t magic;
@@ -45,6 +45,7 @@ typedef struct {
     uint32_t ptt_active_level; // PTT active level
     uint32_t wpm;              // Keying speed, words per minute
     uint32_t tx_mode;          // Transmission mode: MODE_CW / MODE_TONES / MODE_BOTH
+    uint32_t tx_enabled;       // Transmission enabled: 1 = transmit, 0 = paused
     char     msg[MSG_MAX_LEN];     // Message text (Latin letters/digits)
     char     tones[TONES_MAX_LEN]; // Tone sequence "freq:ms ..." (freq 0 = silence)
 } beacon_config_t;
@@ -56,6 +57,7 @@ static beacon_config_t cfg = {
     .ptt_active_level = PTT_ACTIVE_LEVEL,
     .wpm             = DEFAULT_WPM,
     .tx_mode         = MODE_CW,
+    .tx_enabled      = 1,
     .msg             = "CQ CQ CQ DE RP2040",
     .tones           = "",
 };
@@ -75,13 +77,14 @@ static void config_load(void)
         p->wpm >= 5 && p->wpm <= 60 &&
         p->ptt_active_level <= 1 &&
         p->tx_mode <= MODE_BOTH &&
+        p->tx_enabled <= 1 &&
         p->msg[0] >= ' ' &&
         (p->tones[0] == '\0' || p->tones[0] >= ' ')) {
         cfg = *p;
         cfg.msg[MSG_MAX_LEN - 1] = '\0';
         cfg.tones[TONES_MAX_LEN - 1] = '\0';
-        printf("Config loaded from flash: tone=%u Hz, pause=%u s, wpm=%u, ptt_act=%u, mode=%u\n",
-               cfg.tone_hz, cfg.pause_s, cfg.wpm, cfg.ptt_active_level, cfg.tx_mode);
+        printf("Config loaded from flash: tone=%u Hz, pause=%u s, wpm=%u, ptt_act=%u, mode=%u, txen=%u\n",
+               cfg.tone_hz, cfg.pause_s, cfg.wpm, cfg.ptt_active_level, cfg.tx_mode, cfg.tx_enabled);
     } else {
         printf("No valid config in flash, using defaults\n");
     }
@@ -211,10 +214,18 @@ static void handle_command(char *line)
             return;
         }
         printf("txmode set: %s (use 'save' to store)\n", arg);
+    } else if (!strcmp(cmd, "txen")) {
+        int en = atoi(arg);
+        if (en == 0 || en == 1) {
+            cfg.tx_enabled = (uint32_t)en;
+            printf("transmission %s (use 'save' to store)\n",
+                   cfg.tx_enabled ? "ENABLED" : "DISABLED");
+        } else printf("usage: txen <0|1>\n");
     } else if (!strcmp(cmd, "save")) {
         config_save();
     } else if (!strcmp(cmd, "show")) {
         printf("--- Beacon config ---\n");
+        printf("txen : %u\n", cfg.tx_enabled);
         printf("mode : %s\n", cfg.tx_mode == MODE_CW ? "cw" :
                               cfg.tx_mode == MODE_TONES ? "tones" : "both");
         printf("tone : %u Hz\n", cfg.tone_hz);
@@ -232,6 +243,7 @@ static void handle_command(char *line)
         cfg.wpm     = DEFAULT_WPM;
         cfg.ptt_active_level = PTT_ACTIVE_LEVEL;
         cfg.tx_mode = MODE_CW;
+        cfg.tx_enabled = 1;
         strcpy(cfg.msg, "CQ CQ CQ DE RP2040");
         cfg.tones[0] = '\0';
         printf("Defaults restored (use 'save' to store)\n");
@@ -242,6 +254,7 @@ static void handle_command(char *line)
                "  tones <f:d> ... - tone sequence: freq:ms pairs, freq 0 = silence\n"
                "                    e.g. tones 800:100 0:100 800:100 0:500\n"
                "  txmode cw|tones|both - what to transmit\n"
+               "  txen <0|1>      - enable/disable transmission\n"
                "  pause <sec>     - pause between repeats\n"
                "  wpm <5..60>     - keying speed, words per minute\n"
                "  ptt <0|1>       - PTT active level\n"
@@ -506,6 +519,15 @@ int main()
     printf("Type 'help' for commands\n");
 
     while (true) {
+        if (!cfg.tx_enabled) {
+            // Transmission disabled (txen 0): keep the console responsive,
+            // stay silent with the LED green
+            for (uint32_t i = 0; i < 100; i++) {
+                console_poll();
+                sleep_ms(10);
+            }
+            continue;
+        }
         printf("TX: %s\n", cfg.tx_mode == MODE_TONES ? cfg.tones : cfg.msg);
         ptt_set(true);
         sleep_ms_poll(PTT_LEAD_MS);

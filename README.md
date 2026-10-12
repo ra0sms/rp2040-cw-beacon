@@ -1,4 +1,4 @@
-# Beacon — CW (Morse) Beacon for VHF Radio
+# Beacon — CW (Morse) Beacon for HF or VHF Radio
 
 A Morse-code beacon firmware for the [Waveshare RP2040-Zero](https://www.waveshare.com/wiki/RP2040-Zero) board (Raspberry Pi RP2040), designed for keying a VHF FM/SSB transmitter.
 
@@ -61,6 +61,8 @@ Type the command and press **Enter**. If your terminal can send no line ending, 
 | `wpm <5..60>`  | Keying speed, words per minute (dot = 1200 / wpm)  |
 | `tones <f:d> ...` | Tone sequence: `freq:ms` pairs, freq 0–5000 Hz (`0` = silence), duration 10–10000 ms, up to 24 entries. Without arguments — show current sequence |
 | `txmode cw\|tones\|both` | What to transmit: Morse only / tone sequence only / both |
+| `txen <0\|1>`   | Enable/disable transmission (0 = beacon stays silent, e.g. while tuning) |
+| `txen <0\|1>`   | Enable/disable transmission (0 = beacon stays silent, e.g. while tuning) |
 | `ptt <0\|1>`   | PTT active level                                   |
 | `save`         | Write current configuration to flash               |
 | `show`         | Print current configuration                        |
@@ -161,6 +163,7 @@ Features:
 
 - Serial port selection with auto-detection of the Pico CDC port, connect/disconnect
 - Editing all parameters: message, CW tone, keying speed (WPM), tone sequence, TX mode, pause, PTT polarity
+- **Transmission enabled** checkbox — temporarily stop the beacon (e.g. while tuning) and resume it later
 - **Apply** — sends all fields to the device, **Save to flash** — `save`, **Read from device** — fills the fields from the device, **Defaults**
 - Live device log, optional hiding of TX monitor output
 - Manual command line for any console command

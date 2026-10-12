@@ -172,6 +172,13 @@ class MainWindow(QMainWindow):
         self.ptt_combo.setFixedWidth(140)
         form.addRow("PTT active level:", self.ptt_combo)
 
+        self.txen_check = QCheckBox("Transmission enabled")
+        self.txen_check.setChecked(True)
+        self.txen_check.setToolTip(
+            "Uncheck to stop the beacon from transmitting (e.g. while tuning); "
+            "check again to resume. Stored with 'Save to flash'.")
+        form.addRow("", self.txen_check)
+
         root.addWidget(param_box)
 
         # --- actions ---
@@ -365,6 +372,10 @@ class MainWindow(QMainWindow):
             m = re.match(r"ptt\s*:\s*GP\d+,\s*active level\s*(\d)", line)
             if m:
                 self.ptt_combo.setCurrentIndex(int(m.group(1)))
+                return
+            m = re.match(r"txen\s*:\s*(\d)", line)
+            if m:
+                self.txen_check.setChecked(int(m.group(1)) == 1)
         except ValueError:
             pass
 
@@ -382,6 +393,7 @@ class MainWindow(QMainWindow):
             if (mode in ("tones", "both") and self.tones_edit.text().strip()) else None,
             f"pause {self.pause_spin.value()}",
             f"ptt {self.ptt_combo.currentIndex()}",
+            f"txen {1 if self.txen_check.isChecked() else 0}",
         ]
         for cmd in cmds:
             if cmd:
@@ -390,7 +402,7 @@ class MainWindow(QMainWindow):
 
     def _set_controls_enabled(self, enabled: bool):
         for w in (self.msg_edit, self.tone_spin, self.wpm_spin, self.mode_combo,
-                  self.tones_edit, self.pause_spin, self.ptt_combo,
+                  self.tones_edit, self.pause_spin, self.ptt_combo, self.txen_check,
                   self.btn_apply, self.btn_save, self.btn_read,
                   self.btn_defaults, self.btn_stop):
             w.setEnabled(enabled)
