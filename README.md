@@ -2,12 +2,12 @@
 
 A Morse-code beacon firmware for the [Waveshare RP2040-Zero](https://www.waveshare.com/wiki/RP2040-Zero) board (Raspberry Pi RP2040), designed for keying a VHF FM/SSB transmitter.
 
-The firmware generates an audio telegraph tone on one GPIO, controls transmitter PTT on another, transmits a configurable message stored in non-volatile (flash) memory, and repeats it with a configurable pause. All beacon parameters (tone frequency, message text, pause, keying speed, PTT polarity) are configurable at runtime over a USB serial console and persist across power cycles.
+The firmware generates an audio telegraph tone on one GPIO, controls transmitter PTT on another, transmits a configurable message stored in non-volatile (flash) memory, and repeats it with a configurable pause. All beacon parameters (tone frequency, message text, pause, keying speed, transmission mode) are configurable at runtime over a USB serial console and persist across power cycles.
 
 ## Features
 
 - **Telegraph tone output** — hardware PWM square wave, 100–5000 Hz (600/800 Hz typical for FM audio), default **800 Hz**
-- **PTT control** — asserted at the start of the transmission and released after the end of the message, with configurable lead/tail delays and active level (0 or 1)
+- **PTT control** — active-high output, asserted at the start of the transmission and released after the end of the message, with configurable lead/tail delays
 - **Morse message** — full A–Z, 0–9 and `. , ? / - =` encoding with standard element timing; speed set directly in WPM (default **20 WPM**)
 - **Tone sequences** — an arbitrary chain of tone bursts ("freq:ms" pairs, `0` = silence), transmittable instead of (or after) the Morse message
 - **Transmission modes** — `cw` (Morse only), `tones` (tone sequence only), or `both` (Morse, then tones) within one PTT
@@ -63,7 +63,6 @@ Type the command and press **Enter**. If your terminal can send no line ending, 
 | `txmode cw\|tones\|both` | What to transmit: Morse only / tone sequence only / both |
 | `txen <0\|1>`   | Enable/disable transmission (0 = beacon stays silent, e.g. while tuning) |
 | `txen <0\|1>`   | Enable/disable transmission (0 = beacon stays silent, e.g. while tuning) |
-| `ptt <0\|1>`   | PTT active level                                   |
 | `save`         | Write current configuration to flash               |
 | `show`         | Print current configuration                        |
 | `default`      | Restore factory defaults                           |
@@ -172,7 +171,7 @@ python3 gui/beacon_gui.py
 Features:
 
 - Serial port selection with auto-detection of the Pico CDC port, connect/disconnect
-- Editing all parameters: message, CW tone, keying speed (WPM), tone sequence, TX mode, pause, PTT polarity
+- Editing all parameters: message, CW tone, keying speed (WPM), tone sequence, TX mode, pause
 - **Transmission enabled** checkbox — temporarily stop the beacon (e.g. while tuning) and resume it later
 - **Apply** — sends all fields to the device, **Save to flash** — `save`, **Read from device** — fills the fields from the device, **Defaults**
 - Live device log, optional hiding of TX monitor output
@@ -188,11 +187,13 @@ Pins and fixed parameters are defined at the top of [`code/Beacon/Beacon.c`](cod
 
 ```c
 #define TONE_PIN          15   // Telegraph tone output
-#define PTT_PIN           14   // PTT output
-#define PTT_ACTIVE_LEVEL  1    // PTT active level
-#define PTT_LEAD_MS       100  // PTT lead-in delay, ms
+#define PTT_PIN           14   // PTT output (active high)
+#define KEY_PIN           7    // CW key output (active high)
+#define PTT_LEAD_MS       800  // PTT lead-in delay, ms
 #define PTT_TAIL_MS       100  // PTT tail delay, ms
 ```
+
+The PTT and CW key outputs are always **active high** (logic 1 while transmitting / keyed) — this is fixed in the firmware, no configuration needed.
 
 ## License
 

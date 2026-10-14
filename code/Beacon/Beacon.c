@@ -16,9 +16,8 @@
 #define PTT_PIN           14   // PTT output (to transmitter)
 #define KEY_PIN           7    // CW key output (to transmitter key input via transistor)
 
-#define PTT_ACTIVE_LEVEL  1    // PTT active level: 1 or 0
-#define KEY_ACTIVE_LEVEL  1    // CW key active level (keyed = tone sounding): 1 or 0
-#define PTT_LEAD_MS       100  // PTT lead-in delay before transmission, ms
+// PTT and CW key outputs are active-high: 1 while transmitting / keyed
+#define PTT_LEAD_MS       800  // PTT lead-in delay before transmission, ms
 #define PTT_TAIL_MS       100  // PTT tail delay after transmission, ms
 
 // ============================================================
@@ -36,13 +35,12 @@
 // Transmission mode
 enum { MODE_CW = 0, MODE_TONES = 1, MODE_BOTH = 2 };
 
-#define CONFIG_MAGIC    0xBEAC0AC3u
+#define CONFIG_MAGIC    0xBEAC0AC4u
 
 typedef struct {
     uint32_t magic;
     uint32_t tone_hz;          // CW tone frequency, Hz
     uint32_t pause_s;          // Pause between messages, s
-    uint32_t ptt_active_level; // PTT active level
     uint32_t wpm;              // Keying speed, words per minute
     uint32_t tx_mode;          // Transmission mode: MODE_CW / MODE_TONES / MODE_BOTH
     uint32_t tx_enabled;       // Transmission enabled: 1 = transmit, 0 = paused
@@ -54,7 +52,6 @@ static beacon_config_t cfg = {
     .magic           = CONFIG_MAGIC,
     .tone_hz         = DEFAULT_TONE_HZ,
     .pause_s         = DEFAULT_PAUSE_S,
-    .ptt_active_level = PTT_ACTIVE_LEVEL,
     .wpm             = DEFAULT_WPM,
     .tx_mode         = MODE_CW,
     .tx_enabled      = 1,
@@ -75,7 +72,6 @@ static void config_load(void)
         p->tone_hz >= 100 && p->tone_hz <= 5000 &&
         p->pause_s <= 3600 &&
         p->wpm >= 5 && p->wpm <= 60 &&
-        p->ptt_active_level <= 1 &&
         p->tx_mode <= MODE_BOTH &&
         p->tx_enabled <= 1 &&
         p->msg[0] >= ' ' &&
@@ -83,8 +79,8 @@ static void config_load(void)
         cfg = *p;
         cfg.msg[MSG_MAX_LEN - 1] = '\0';
         cfg.tones[TONES_MAX_LEN - 1] = '\0';
-        printf("Config loaded from flash: tone=%u Hz, pause=%u s, wpm=%u, ptt_act=%u, mode=%u, txen=%u\n",
-               cfg.tone_hz, cfg.pause_s, cfg.wpm, cfg.ptt_active_level, cfg.tx_mode, cfg.tx_enabled);
+        printf("Config loaded from flash: tone=%u Hz, pause=%u s, wpm=%u, mode=%u, txen=%u\n",
+               cfg.tone_hz, cfg.pause_s, cfg.wpm, cfg.tx_mode, cfg.tx_enabled);
     } else {
         printf("No valid config in flash, using defaults\n");
     }
@@ -181,12 +177,6 @@ static void handle_command(char *line)
             printf("wpm set: %u (dot %u ms) (use 'save' to store)\n",
                    cfg.wpm, dot_ms());
         } else printf("usage: wpm <5..60>\n");
-    } else if (!strcmp(cmd, "ptt")) {
-        int lvl = atoi(arg);
-        if (lvl == 0 || lvl == 1) {
-            cfg.ptt_active_level = (uint32_t)lvl;
-            printf("ptt active level set: %u (use 'save' to store)\n", lvl);
-        } else printf("usage: ptt <0|1>\n");
     } else if (!strcmp(cmd, "tones")) {
         if (arg[0]) {
             if (tones_validate(arg)) {
@@ -233,15 +223,14 @@ static void handle_command(char *line)
         printf("tones: %s\n", cfg.tones[0] ? cfg.tones : "(empty)");
         printf("pause: %u s\n", cfg.pause_s);
         printf("wpm  : %u (dot %u ms)\n", cfg.wpm, dot_ms());
-        printf("ptt  : GP%u, active level %u\n", PTT_PIN, cfg.ptt_active_level);
-        printf("key  : GP%u, active level %u\n", KEY_PIN, KEY_ACTIVE_LEVEL);
+        printf("ptt  : GP%u (active high)\n", PTT_PIN);
+        printf("key  : GP%u (active high)\n", KEY_PIN);
         printf("tone pin: GP%u\n", TONE_PIN);
         printf("---------------------\n");
     } else if (!strcmp(cmd, "default")) {
         cfg.tone_hz = DEFAULT_TONE_HZ;
         cfg.pause_s = DEFAULT_PAUSE_S;
         cfg.wpm     = DEFAULT_WPM;
-        cfg.ptt_active_level = PTT_ACTIVE_LEVEL;
         cfg.tx_mode = MODE_CW;
         cfg.tx_enabled = 1;
         strcpy(cfg.msg, "CQ CQ CQ DE RP2040");
@@ -257,7 +246,6 @@ static void handle_command(char *line)
                "  txen <0|1>      - enable/disable transmission\n"
                "  pause <sec>     - pause between repeats\n"
                "  wpm <5..60>     - keying speed, words per minute\n"
-               "  ptt <0|1>       - PTT active level\n"
                "  save            - store config to flash\n"
                "  show            - show config\n"
                "  default         - restore defaults\n");
@@ -331,8 +319,7 @@ static uint tone_slice = 0, tone_chan = 0;
 // active while the tone sounds
 static void key_set(bool keyed)
 {
-    gpio_put(KEY_PIN, keyed ? (KEY_ACTIVE_LEVEL != 0)
-                            : (KEY_ACTIVE_LEVEL == 0));
+    gpio_put(KEY_PIN, keyed); // active high
 }
 
 static void tone_start(uint32_t freq_hz)
@@ -377,8 +364,7 @@ static void tone_stop(void)
 // ============================================================
 static void ptt_set(bool active)
 {
-    gpio_put(PTT_PIN, active ? (cfg.ptt_active_level != 0)
-                             : (cfg.ptt_active_level == 0));
+    gpio_put(PTT_PIN, active); // active high
 }
 
 // ============================================================
