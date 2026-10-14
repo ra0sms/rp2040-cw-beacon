@@ -182,8 +182,8 @@ class MainWindow(QMainWindow):
         self.btn_apply.setToolTip("Send all parameters to the device")
         self.btn_apply.clicked.connect(self.apply_params)
         self.btn_save = QPushButton("Save to flash")
-        self.btn_save.setToolTip("Store current configuration in flash")
-        self.btn_save.clicked.connect(lambda: self.send_command("save"))
+        self.btn_save.setToolTip("Apply the fields, then store the configuration in flash")
+        self.btn_save.clicked.connect(self.apply_and_save)
         self.btn_read = QPushButton("Read from device")
         self.btn_read.setToolTip("Request 'show' and fill the fields")
         self.btn_read.clicked.connect(lambda: self.send_command("show"))
@@ -375,13 +375,20 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     def apply_params(self):
         mode = self.mode_combo.currentText()
+        tones = self.tones_edit.text().strip()
+        if mode in ("tones", "both") and not tones:
+            QMessageBox.warning(
+                self, "Beacon GUI",
+                "Tone sequence is empty, so nothing will be transmitted in "
+                "'tones'/'both' mode.\n\n"
+                "Fill the 'Tone sequence' field, e.g.:\n"
+                "800:150 0:100 800:150 0:500")
         cmds = [
             f"msg {self.msg_edit.text().strip()}" if self.msg_edit.text().strip() else None,
             f"tone {self.tone_spin.value()}",
             f"wpm {self.wpm_spin.value()}",
             f"txmode {mode}",
-            f"tones {self.tones_edit.text().strip()}"
-            if (mode in ("tones", "both") and self.tones_edit.text().strip()) else None,
+            f"tones {tones}" if tones else None,
             f"pause {self.pause_spin.value()}",
             f"txen {1 if self.txen_check.isChecked() else 0}",
         ]
@@ -389,6 +396,12 @@ class MainWindow(QMainWindow):
             if cmd:
                 self.send_command(cmd)
                 time.sleep(0.05)  # let the device process commands in order
+
+    def apply_and_save(self):
+        """Apply the GUI fields to the device, then store them in flash."""
+        self.apply_params()
+        time.sleep(0.2)
+        self.send_command("save")
 
     def _set_controls_enabled(self, enabled: bool):
         for w in (self.msg_edit, self.tone_spin, self.wpm_spin, self.mode_combo,
