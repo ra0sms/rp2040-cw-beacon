@@ -83,6 +83,16 @@ tones 800:150 0:100 800:150 0:100 1200:150 0:500
 save
 ```
 
+## Helper scripts
+
+| Script | Purpose |
+|--------|---------|
+| [`scripts/build.sh`](scripts/build.sh) | Configure (once) and build the firmware → `code/Beacon/build/Beacon.uf2` |
+| [`scripts/flash.sh`](scripts/flash.sh) | Flash the built firmware to the board via picotool (auto-detects the picotool from the Pico VS Code extension; override with `PICOTOOL=/path/to/picotool`) |
+| [`scripts/update_firmware.sh`](scripts/update_firmware.sh) | Copy the freshly built binary to the tracked [`firmware/Beacon-v0.1.uf2`](firmware/Beacon-v0.1.uf2) |
+
+Typical workflow: `./scripts/build.sh && ./scripts/flash.sh`, then `./scripts/update_firmware.sh` before committing a new firmware version.
+
 ## Building from source
 
 If you want to modify the firmware, build it yourself. The project uses:
