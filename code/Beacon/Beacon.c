@@ -17,7 +17,7 @@
 #define KEY_PIN           7    // CW key output (to transmitter key input via transistor)
 
 // PTT and CW key outputs are active-high: 1 while transmitting / keyed
-#define PTT_LEAD_MS       800  // PTT lead-in delay before transmission, ms
+#define PTT_LEAD_MS       1000  // PTT lead-in delay before transmission, ms
 #define PTT_TAIL_MS       100  // PTT tail delay after transmission, ms
 
 // ============================================================
