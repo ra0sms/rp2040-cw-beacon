@@ -14,7 +14,7 @@
 // ============================================================
 #define TONE_PIN          15   // Telegraph tone output (to transmitter input)
 #define PTT_PIN           14   // PTT output (to transmitter)
-#define KEY_PIN           13   // CW key output (to transmitter key input via transistor)
+#define KEY_PIN           7    // CW key output (to transmitter key input via transistor)
 
 #define PTT_ACTIVE_LEVEL  1    // PTT active level: 1 or 0
 #define KEY_ACTIVE_LEVEL  1    // CW key active level (keyed = tone sounding): 1 or 0
@@ -495,11 +495,6 @@ int main()
     gpio_init(PTT_PIN);
     gpio_set_dir(PTT_PIN, GPIO_OUT);
     ptt_set(false);
-
-    // CW key: output, initially not keyed
-    gpio_init(KEY_PIN);
-    gpio_set_dir(KEY_PIN, GPIO_OUT);
-    key_set(false);
 
     // CW key: output, initially not keyed
     gpio_init(KEY_PIN);

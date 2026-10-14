@@ -22,7 +22,7 @@ The firmware generates an audio telegraph tone on one GPIO, controls transmitter
 |-----------|------|--------------------------------------------------|
 | Tone      | GP15 | Telegraph tone output → transmitter audio input  |
 | PTT       | GP14 | PTT output → transmitter PTT line                |
-| CW key    | GP13 | Key output → transmitter key input via transistor (keyed while the tone sounds) |
+| CW key    | GP7  | Key output → transmitter key input via transistor (keyed while the tone sounds) |
 | WS2812    | GP16 | Onboard status LED (built into the board)        |
 
 > Connect the tone output to the transmitter's audio/modulation input (use an attenuator or level shifter if required by your radio) and the PTT output to the transmitter's PTT input, sharing a common ground. The CW key output drives the transmitter's built-in keyer input through an external transistor (e.g. 2N2222 / IRLML6402 depending on key input polarity): GPIO → 1k resistor → transistor base, key line on the collector/emitter side. The key is closed while the tone sounds (dots/dashes in CW mode, active entries of the tone sequence).
