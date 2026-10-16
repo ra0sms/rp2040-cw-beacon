@@ -37,8 +37,18 @@ pico_sdk_init()
 
 add_executable(Beacon Beacon.c )
 
+set(BEACON_VERSION "0.2")
 pico_set_program_name(Beacon "Beacon")
-pico_set_program_version(Beacon "0.1")
+pico_set_program_version(Beacon "${BEACON_VERSION}")
+
+# version.h (program version + git describe), regenerated on every build
+add_custom_target(beacon_version
+    COMMAND ${CMAKE_COMMAND} -DSRC=${CMAKE_CURRENT_LIST_DIR}
+            -DOUT=${CMAKE_CURRENT_BINARY_DIR}/version.h
+            -DVERSION=${BEACON_VERSION}
+            -P ${CMAKE_CURRENT_LIST_DIR}/version.cmake
+    BYPRODUCTS ${CMAKE_CURRENT_BINARY_DIR}/version.h)
+add_dependencies(Beacon beacon_version)
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(Beacon 0)
@@ -49,11 +59,13 @@ target_link_libraries(Beacon
         pico_stdlib
         pico_status_led
         hardware_pwm
-        hardware_flash)
+        hardware_flash
+        hardware_watchdog)
 
 # Add the standard include files to the build
 target_include_directories(Beacon PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 pico_add_extra_outputs(Beacon)

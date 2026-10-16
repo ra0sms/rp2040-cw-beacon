@@ -27,5 +27,11 @@ fi
 PICOTOOL="${PICOTOOL:-picotool}"
 
 echo "==> Flashing $UF2 with $PICOTOOL"
-"$PICOTOOL" load "$UF2" -fx
+# The first attempt often gives up before the board has re-enumerated in
+# BOOTSEL mode after the USB reboot request - retry once
+if ! "$PICOTOOL" load "$UF2" -fx; then
+    echo "==> Retrying..."
+    sleep 2
+    "$PICOTOOL" load "$UF2" -fx
+fi
 echo "==> Done"

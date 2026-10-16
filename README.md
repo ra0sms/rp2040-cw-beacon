@@ -6,15 +6,17 @@ The firmware generates an audio telegraph tone on one GPIO, controls transmitter
 
 ## Features
 
-- **Telegraph tone output** — hardware PWM square wave, 100–5000 Hz (600/800 Hz typical for FM audio), default **800 Hz**
+- **Telegraph tone output** — clean sine wave (DDS over a 62.5 kHz PWM carrier) with 5 ms raised-cosine rise/fall to avoid key clicks, 100–5000 Hz (600/800 Hz typical for FM audio), default **800 Hz**
 - **PTT control** — active-high output, asserted at the start of the transmission and released after the end of the message, with configurable lead/tail delays
-- **Morse message** — full A–Z, 0–9 and `. , ? / - =` encoding with standard element timing; speed set directly in WPM (default **20 WPM**)
+- **Morse message** — full A–Z, 0–9, `. , ? / - = @ : + ( ) " ' !` and prosigns (`<SK>`, `<BT>`, `<AR>`, …) encoding with standard element timing; speed set directly in WPM (default **20 WPM**)
 - **Tone sequences** — an arbitrary chain of tone bursts ("freq:ms" pairs, `0` = silence), transmittable instead of (or after) the Morse message
 - **Transmission modes** — `cw` (Morse only), `tones` (tone sequence only), or `both` (Morse, then tones) within one PTT
 - **Non-volatile configuration** — stored in the last sector of the onboard flash; survives power-off and reflashing
 - **Ready-to-flash firmware** — a prebuilt `.uf2` binary is included in [`firmware/`](firmware/), no toolchain required
 - **USB console** — live configuration over the USB CDC serial port
-- **Status LED** — onboard WS2812 (GP16): steady green in the pause, red blinking in sync with the keying during transmission
+- **Transmitter safety** — time-out timer (PTT is forcibly released after 120 s), hardware watchdog (reboot with PTT off if the firmware hangs), `txen 0` aborts the transmission immediately
+- **Accurate keying** — the whole transmission is laid out in advance and played by a hardware timer, so console activity and USB output do not affect the timing
+- **Status LED** — onboard WS2812 (GP16): steady green in the pause, red blinking in sync with the keying during transmission; brightness configurable
 
 ## Hardware
 
@@ -25,24 +27,24 @@ The firmware generates an audio telegraph tone on one GPIO, controls transmitter
 | CW key    | GP7  | Key output → transmitter key input via transistor (keyed while the tone sounds) |
 | WS2812    | GP16 | Onboard status LED (built into the board)        |
 
-> Connect the tone output to the transmitter's audio/modulation input (use an attenuator or level shifter if required by your radio) and the PTT output to the transmitter's PTT input, sharing a common ground. The CW key output drives the transmitter's built-in keyer input through an external transistor (e.g. 2N2222 / IRLML6402 depending on key input polarity): GPIO → 1k resistor → transistor base, key line on the collector/emitter side. The key is closed while the tone sounds (dots/dashes in CW mode, active entries of the tone sequence).
+> Connect the tone output to the transmitter's audio/modulation input (use an attenuator or level shifter if required by your radio) and the PTT output to the transmitter's PTT input, sharing a common ground. The tone output idles at mid-supply (~1.65 V DC) and carries a sine of ~3.1 V p-p, so the audio input must be AC-coupled (a series capacitor of 1–10 µF if the radio has none). The 62.5 kHz PWM carrier is far above the audio band and is removed by the transmitter's audio filtering; for a cleaner signal add an RC low-pass (e.g. 1 kΩ + 22 nF, ≈7 kHz) at the pin. The CW key output drives the transmitter's built-in keyer input through an external transistor (e.g. 2N2222 / IRLML6402 depending on key input polarity): GPIO → 1k resistor → transistor base, key line on the collector/emitter side. The key is closed while the tone sounds (dots/dashes in CW mode, active entries of the tone sequence).
 
 ![Waveshare RP2040-Zero pinout](pics/rp2040_zero_pinout.png)
 
 ## Flashing
 
-A prebuilt firmware binary is included in the repository: [`firmware/Beacon-v0.1.uf2`](firmware/Beacon-v0.1.uf2). You do not need to build anything to flash it.
+A prebuilt firmware binary is included in the repository: [`firmware/Beacon-v0.2.uf2`](firmware/Beacon-v0.2.uf2). You do not need to build anything to flash it.
 
 **Method 1 — BOOTSEL button:**
 
 1. Hold the BOOT button and connect the board via USB.
 2. The board appears as a USB mass-storage device (`RPI-RP2`).
-3. Copy the firmware: `cp firmware/Beacon-v0.1.uf2 /run/media/$USER/RPI-RP2/`
+3. Copy the firmware: `cp firmware/Beacon-v0.2.uf2 /run/media/$USER/RPI-RP2/`
 
 **Method 2 — picotool (no button required):**
 
 ```bash
-picotool load firmware/Beacon-v0.1.uf2 -fx
+picotool load firmware/Beacon-v0.2.uf2 -fx
 ```
 
 If the currently running firmware does not support USB reboot, use the BOOTSEL button method.
@@ -55,20 +57,23 @@ Type the command and press **Enter**. If your terminal can send no line ending, 
 
 | Command        | Description                                        |
 |----------------|----------------------------------------------------|
-| `msg <text>`   | Set message text (A–Z, 0–9, `. , ? / - =`)         |
+| `msg <text>`   | Set message text (A–Z, 0–9, `. , ? / - = @ : + ( ) " ' !`); prosigns in angle brackets are sent without letter gaps, e.g. `<SK>`, `<BT>`. Max 95 characters |
 | `tone <hz>`    | Set tone frequency, 100–5000 Hz                    |
 | `pause <sec>`  | Pause between message repeats, 0–3600 s            |
 | `wpm <5..60>`  | Keying speed, words per minute (dot = 1200 / wpm)  |
 | `tones <f:d> ...` | Tone sequence: `freq:ms` pairs, freq 0–5000 Hz (`0` = silence), duration 10–10000 ms, up to 24 entries. Without arguments — show current sequence |
 | `txmode cw\|tones\|both` | What to transmit: Morse only / tone sequence only / both |
-| `txen <0\|1>`   | Enable/disable transmission (0 = beacon stays silent, e.g. while tuning) |
-| `txen <0\|1>`   | Enable/disable transmission (0 = beacon stays silent, e.g. while tuning) |
-| `save`         | Write current configuration to flash               |
+| `txen <0\|1>`   | Enable/disable transmission (0 = stops immediately, PTT released; beacon stays silent, e.g. while tuning) |
+| `led <0..100>` | Status LED brightness, % (default 20)              |
+| `save`         | Write current configuration to flash (during a transmission it is deferred until the transmission ends) |
 | `show`         | Print current configuration                        |
 | `default`      | Restore factory defaults                           |
+| `ver`          | Firmware version (program version and git revision) |
 | `help`         | Show command list                                  |
 
-Changes take effect immediately; use `save` to make them permanent.
+Changes take effect immediately (from the next transmission); use `save` to make them permanent. Invalid values are rejected with an `error:`/`usage:` reply and leave the setting unchanged. When the message, speed, mode or tone sequence makes a transmission longer than the 120 s time-out, a `warning:` is printed — such a transmission would be cut off. `show` also prints the transmission length (`txlen`).
+
+The configuration is stored with a version number and CRC-32; a configuration saved by firmware v0.1 is migrated automatically on first boot.
 
 ### Example session
 
@@ -88,7 +93,8 @@ save
 |--------|---------|
 | [`scripts/build.sh`](scripts/build.sh) | Configure (once) and build the firmware → `code/Beacon/build/Beacon.uf2` |
 | [`scripts/flash.sh`](scripts/flash.sh) | Flash the built firmware to the board via picotool (auto-detects the picotool from the Pico VS Code extension; override with `PICOTOOL=/path/to/picotool`) |
-| [`scripts/update_firmware.sh`](scripts/update_firmware.sh) | Copy the freshly built binary to the tracked [`firmware/Beacon-v0.1.uf2`](firmware/Beacon-v0.1.uf2) |
+| [`scripts/build_gui_exe.bat`](scripts/build_gui_exe.bat) | (Windows) Build the standalone `gui/beacon_gui.exe` with PyInstaller |
+| [`scripts/update_firmware.sh`](scripts/update_firmware.sh) | Copy the freshly built binary to the tracked [`firmware/Beacon-v0.2.uf2`](firmware/Beacon-v0.2.uf2) |
 
 Typical workflow: `./scripts/build.sh && ./scripts/flash.sh`, then `./scripts/update_firmware.sh` before committing a new firmware version.
 
@@ -171,7 +177,9 @@ python3 gui/beacon_gui.py
 Features:
 
 - Serial port selection with auto-detection of the Pico CDC port, connect/disconnect
-- Editing all parameters: message, CW tone, keying speed (WPM), tone sequence, TX mode, pause
+- Editing all parameters: message, CW tone, keying speed (WPM), tone sequence, TX mode, pause, LED brightness; the message field only accepts characters the firmware can send
+- **Apply** sends the fields one by one, waiting for the device's reply to each; rejected values and time-out warnings are reported in a summary dialog
+- Firmware version display; a lost connection (cable unplugged, board reset) is detected automatically
 - **Transmission enabled** checkbox — temporarily stop the beacon (e.g. while tuning) and resume it later
 - **Apply** — sends all fields to the device, **Save to flash** — `save`, **Read from device** — fills the fields from the device, **Defaults**
 - Live device log, optional hiding of TX monitor output
@@ -189,8 +197,10 @@ Pins and fixed parameters are defined at the top of [`code/Beacon/Beacon.c`](cod
 #define TONE_PIN          15   // Telegraph tone output
 #define PTT_PIN           14   // PTT output (active high)
 #define KEY_PIN           7    // CW key output (active high)
-#define PTT_LEAD_MS       800  // PTT lead-in delay, ms
+#define PTT_LEAD_MS       1000 // PTT lead-in delay, ms
 #define PTT_TAIL_MS       100  // PTT tail delay, ms
+#define TX_MAX_MS         120000 // Time-out timer: max PTT time per transmission, ms
+#define WATCHDOG_MS       3000 // Watchdog timeout, ms
 ```
 
 The PTT and CW key outputs are always **active high** (logic 1 while transmitting / keyed) — this is fixed in the firmware, no configuration needed.
