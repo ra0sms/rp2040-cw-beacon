@@ -19,5 +19,6 @@ fi
 for old in "$ROOT"/firmware/Beacon-v*.uf2; do
     [ "$old" != "$DST" ] && [ -e "$old" ] && git -C "$ROOT" rm -q "$old" 2>/dev/null || true
 done
+mkdir -p "$(dirname "$DST")"
 cp "$SRC" "$DST"
 echo "==> Updated: $DST"
