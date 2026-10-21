@@ -1,13 +1,30 @@
 # Beacon — CW (Morse) Beacon for HF or VHF Radio
 
-A Morse-code beacon firmware for the [Waveshare RP2040-Zero](https://www.waveshare.com/wiki/RP2040-Zero) board (Raspberry Pi RP2040), designed for keying a VHF FM/SSB transmitter.
+A Morse-code beacon controller built around the [Waveshare RP2040-Zero](https://www.waveshare.com/wiki/RP2040-Zero) module (Raspberry Pi RP2040), designed for keying an HF/VHF FM/SSB/CW transmitter.
 
-The firmware generates an audio telegraph tone on one GPIO, controls transmitter PTT on another, transmits a configurable message stored in non-volatile (flash) memory, and repeats it with a configurable pause. All beacon parameters (tone frequency, message text, pause, keying speed, transmission mode) are configurable at runtime over a USB serial console and persist across power cycles.
+The project consists of:
+
+- **Firmware** — generates a sine audio tone, controls the transmitter PTT and CW key, transmits a configurable message stored in flash and repeats it with a configurable pause. All parameters are configurable at runtime over a USB serial console and persist across power cycles.
+- **Controller board** (KiCad) — power supply 8–15 V, audio output with attenuator and low-pass filter, open-collector PTT and CW key outputs, supply voltage divider and expansion headers. Gerber files are ready for ordering.
+- **Desktop GUI** — configuration and monitoring tool for Linux and Windows.
+
+![Beacon controller board (3D view)](pics/rp2040_beacon_3d.png)
+
+## Repository layout
+
+| Path | Contents |
+|------|----------|
+| [`code/Beacon/`](code/Beacon/) | Firmware source (Pico SDK, CMake) |
+| [`firmware/`](firmware/) | Prebuilt firmware `.uf2` |
+| [`gui/`](gui/) | Configuration GUI (`beacon_gui.py`, Windows build in `beacon_gui.zip`) |
+| [`KiCad/beacon_rp2040/`](KiCad/beacon_rp2040/) | Board schematic and PCB (KiCad 10), schematic PDF, Gerber files, interactive BOM |
+| [`scripts/`](scripts/) | Build / flash helper scripts |
+| [`pics/`](pics/) | Schematic, 3D view, screenshots |
 
 ## Features
 
 - **Telegraph tone output** — clean sine wave (DDS over a 62.5 kHz PWM carrier) with 5 ms raised-cosine rise/fall to avoid key clicks, 100–5000 Hz (600/800 Hz typical for FM audio), default **800 Hz**
-- **PTT control** — active-high output, asserted at the start of the transmission and released after the end of the message, with configurable lead/tail delays
+- **PTT control** — asserted at the start of the transmission and released after the end of the message, with lead/tail delays
 - **Morse message** — full A–Z, 0–9, `. , ? / - = @ : + ( ) " ' !` and prosigns (`<SK>`, `<BT>`, `<AR>`, …) encoding with standard element timing; speed set directly in WPM (default **20 WPM**)
 - **Tone sequences** — an arbitrary chain of tone bursts ("freq:ms" pairs, `0` = silence), transmittable instead of (or after) the Morse message
 - **Transmission modes** — `cw` (Morse only), `tones` (tone sequence only), or `both` (Morse, then tones) within one PTT
@@ -20,16 +37,87 @@ The firmware generates an audio telegraph tone on one GPIO, controls transmitter
 
 ## Hardware
 
-| Signal    | GPIO | Description                                      |
-|-----------|------|--------------------------------------------------|
-| Tone      | GP15 | Telegraph tone output → transmitter audio input  |
-| PTT       | GP14 | PTT output → transmitter PTT line                |
-| CW key    | GP7  | Key output → transmitter key input via transistor (keyed while the tone sounds) |
-| WS2812    | GP16 | Onboard status LED (built into the board)        |
+### Controller board
 
-> Connect the tone output to the transmitter's audio/modulation input (use an attenuator or level shifter if required by your radio) and the PTT output to the transmitter's PTT input, sharing a common ground. The tone output idles at mid-supply (~1.65 V DC) and carries a sine of ~3.1 V p-p, so the audio input must be AC-coupled (a series capacitor of 1–10 µF if the radio has none). The 62.5 kHz PWM carrier is far above the audio band and is removed by the transmitter's audio filtering; for a cleaner signal add an RC low-pass (e.g. 1 kΩ + 22 nF, ≈7 kHz) at the pin. The CW key output drives the transmitter's built-in keyer input through an external transistor (e.g. 2N2222 / IRLML6402 depending on key input polarity): GPIO → 1k resistor → transistor base, key line on the collector/emitter side. The key is closed while the tone sounds (dots/dashes in CW mode, active entries of the tone sequence).
+![Schematic](pics/beacon_rp2040_schema.png)
+
+Two-layer board, 75 × 32 mm, four M3 mounting holes (connected to GND). The RP2040-Zero module is soldered flat onto the board by its castellated pads; its USB-C connector faces the board edge and is used for configuration and firmware updates. Full schematic: [`beacon_rp2040.pdf`](KiCad/beacon_rp2040/beacon_rp2040.pdf).
+
+#### Main connector J1 (to the transmitter)
+
+| Pin | Label | Function |
+|-----|-------|----------|
+| 1 | `8-15V` | Supply input, 8–15 V DC (reverse-polarity protected) |
+| 2 | `GND` | Ground |
+| 3 | `AUDIO` | Audio output → transmitter microphone / modulation input |
+| 4 | `CW_OUT` | CW key output, open collector to GND (closed while the tone sounds) |
+| 5 | `PTT_OUT` | PTT output, open collector to GND (closed during transmission) |
+| 6 | `GND` | Ground |
+
+#### Outputs
+
+- **PTT / CW key** — BC817 NPN transistors, open collector to ground: connect directly to the radio's PTT and straight-key inputs (both are normally "close to ground" lines). Up to 45 V and ~50–100 mA. When switching a relay coil, put a flyback diode across the coil. Each output has a 100 nF capacitor to ground against RF pickup and a 10 kΩ pull-down on the base drive, so the outputs stay off while the module boots.
+- **Audio** — GP15 sine → 34 kΩ / 1 kΩ divider → 47 nF low-pass (≈3.5 kHz, suppresses the 62.5 kHz PWM carrier) → 10 µF coupling capacitor. Output level is about 90 mV p-p (≈30 mV RMS) at the default settings — suitable for a microphone input. For a line/data input increase the 1 kΩ resistor (R2) or decrease the 34 kΩ resistor (R1).
+- **Status LEDs** — headers `LED` / `CW`–`GND` and `LED` / `PTT`–`GND` for external indicator LEDs (anode to `CW`/`PTT`, cathode to `GND`; 1 kΩ series resistors are on the board). They light while the key is closed / PTT is active. The onboard WS2812 of the RP2040-Zero shows the beacon state as well.
+
+#### Power supply
+
+- Input 8–15 V → MBR0540 reverse-polarity diode → LM7805 (TO-220) → MBR0540 → +5 V rail → RP2040-Zero (its own 3.3 V regulator).
+- The output diode isolates the regulator from USB: with only USB connected the board is powered from the computer (handy for configuration); with both connected the higher voltage wins, nothing is back-fed.
+- The 7805 needs ~2 V of headroom plus ~0.3 V for the input diode, hence the 8 V minimum. At 13.8 V it dissipates about 8.5 V × load current — fine for the beacon itself (tens of mA) without a heatsink; keep external loads on the 5 V / 3.3 V headers small (≲100 mA) or add a heatsink.
+- Supply voltage divider 100 kΩ / 10 kΩ + 100 nF to **GP26 (ADC0)**, ratio 1:11, range up to ~36 V — reserved for supply monitoring (not used by the firmware yet).
+
+#### Expansion headers
+
+| Header | Pins |
+|--------|------|
+| J2 `GPIOs` (18 pins) | 1 `3.3V`, 2–8 `GP0`–`GP6`, 9–14 `GP8`–`GP13`, 15–17 `GP27`–`GP29` (ADC1–ADC3), 18 `GND` |
+| J3 `GND` | 3 × GND |
+| J4 `5V` | 3 × +5 V rail (≈4.7 V after the isolation diode, or USB 5 V) |
+
+GPIOs are 3.3 V logic and are not 5 V tolerant. GP7, GP14, GP15 and GP26 are used by the board and are not brought out.
+
+#### RP2040-Zero pin usage
+
+| Signal | GPIO | Description |
+|--------|------|-------------|
+| Tone   | GP15 | Audio tone (sine via PWM) → J1 `AUDIO` |
+| PTT    | GP14 | PTT transistor → J1 `PTT_OUT`, PTT LED |
+| CW key | GP7  | CW key transistor → J1 `CW_OUT`, CW LED |
+| Vin sense | GP26 | Supply voltage divider (ADC0) |
+| WS2812 | GP16 | Onboard status LED (built into the module) |
 
 ![Waveshare RP2040-Zero pinout](pics/rp2040_zero_pinout.png)
+
+#### Manufacturing files
+
+| File | Contents |
+|------|----------|
+| [`KiCad/beacon_rp2040/beacon_rp2040_gerbers.zip`](KiCad/beacon_rp2040/beacon_rp2040_gerbers.zip) | Gerber + drill files, ready to upload to a PCB manufacturer (2 layers, 1.6 mm) |
+| [`KiCad/beacon_rp2040/gerbers/`](KiCad/beacon_rp2040/gerbers/) | The same files, unpacked |
+| [`KiCad/beacon_rp2040/bom/ibom.html`](KiCad/beacon_rp2040/bom/ibom.html) | Interactive BOM / placement helper (download and open in a browser) |
+| [`KiCad/beacon_rp2040/beacon_rp2040.pdf`](KiCad/beacon_rp2040/beacon_rp2040.pdf) | Schematic (PDF) |
+
+#### Bill of materials
+
+| Qty | Value | Package | References |
+|-----|-------|---------|------------|
+| 1 | Waveshare RP2040-Zero | castellated module | U1 |
+| 1 | LM7805 | TO-220 | U2 |
+| 2 | BC817 (2N7002 also fits) | SOT-23 | Q3, Q4 |
+| 2 | MBR0540 | SOD-123 | D1, D4 |
+| 1 | 34 kΩ (33 kΩ is fine) | 1206 | R1 |
+| 1 | 100 kΩ | 1206 | R7 |
+| 3 | 10 kΩ | 1206 | R3, R5, R8 |
+| 5 | 1 kΩ | 1206 | R2, R4, R6, R9, R10 |
+| 5 | 100 nF | 1206 | C2, C3, C5, C10, C11 |
+| 3 | 10 µF ceramic, ≥25 V | 1206 | C4, C9, C12 |
+| 1 | 47 nF | 1206 | C6 |
+| 2 | 47 µF electrolytic, ≥25 V | radial 5 mm | C13, C14 |
+| 1 | Pin header 1×6, 2.54 mm | THT | J1 |
+| 1 | Pin header 1×18, 2.54 mm | THT | J2 |
+| 2 | Pin header 1×3, 2.54 mm | THT | J3, J4 |
+| 2 | Pin header 1×2, 2.54 mm (external LEDs) | THT | D2, D3 |
 
 ## Flashing
 
@@ -93,7 +181,7 @@ save
 |--------|---------|
 | [`scripts/build.sh`](scripts/build.sh) | Configure (once) and build the firmware → `code/Beacon/build/Beacon.uf2` |
 | [`scripts/flash.sh`](scripts/flash.sh) | Flash the built firmware to the board via picotool (auto-detects the picotool from the Pico VS Code extension; override with `PICOTOOL=/path/to/picotool`) |
-| [`scripts/build_gui_exe.bat`](scripts/build_gui_exe.bat) | (Windows) Build the standalone `gui/beacon_gui.exe` with PyInstaller |
+| [`scripts/build_gui_exe.bat`](scripts/build_gui_exe.bat) | (Windows) Build the standalone `gui/beacon_gui.exe` with PyInstaller (pack it into `gui/beacon_gui.zip` for the repository) |
 | [`scripts/update_firmware.sh`](scripts/update_firmware.sh) | Copy the freshly built binary to the tracked [`firmware/Beacon-v0.2.uf2`](firmware/Beacon-v0.2.uf2) |
 
 Typical workflow: `./scripts/build.sh && ./scripts/flash.sh`, then `./scripts/update_firmware.sh` before committing a new firmware version.
@@ -136,7 +224,7 @@ cmake --build code/Beacon/build
 
 The firmware binary is produced at `code/Beacon/build/Beacon.uf2`.
 
-`picotool` (for USB flashing without the BOOTSEL button) is bundled with the VS Code extension, or can be built from [pico-sdk-tools](https://github.com/raspberrypi/picotool) / installed as `picotool` package on recent distros. Without it, use the BOOTSEL button method below.
+`picotool` (for USB flashing without the BOOTSEL button) is bundled with the VS Code extension, or can be built from [picotool](https://github.com/raspberrypi/picotool) / installed as `picotool` package on recent distros. Without it, use the BOOTSEL button method.
 
 ### Flashing the built firmware
 
@@ -158,7 +246,7 @@ If the currently running firmware does not support USB reboot, use the BOOTSEL b
 
 A PyQt5/PyQt6 desktop GUI is available for convenient configuration and monitoring: [`gui/beacon_gui.py`](gui/beacon_gui.py).
 
-**Windows users:** a standalone build that needs no Python installation is available: [`gui/beacon_gui.exe`](gui/beacon_gui.exe) — just download and run. On first launch the SmartScreen may warn about an unsigned binary; choose "More info" → "Run anyway".
+**Windows users:** a standalone build that needs no Python installation is available: [`gui/beacon_gui.zip`](gui/beacon_gui.zip) — download, unpack and run `beacon_gui.exe`. On first launch the SmartScreen may warn about an unsigned binary; choose "More info" → "Run anyway".
 
 Install the Python dependencies:
 
@@ -179,9 +267,9 @@ Features:
 - Serial port selection with auto-detection of the Pico CDC port, connect/disconnect
 - Editing all parameters: message, CW tone, keying speed (WPM), tone sequence, TX mode, pause, LED brightness; the message field only accepts characters the firmware can send
 - **Apply** sends the fields one by one, waiting for the device's reply to each; rejected values and time-out warnings are reported in a summary dialog
-- Firmware version display; a lost connection (cable unplugged, board reset) is detected automatically
+- **Save to flash** — Apply, then `save`; **Read from device** — fills the fields from the device; **Defaults**
 - **Transmission enabled** checkbox — temporarily stop the beacon (e.g. while tuning) and resume it later
-- **Apply** — sends all fields to the device, **Save to flash** — `save`, **Read from device** — fills the fields from the device, **Defaults**
+- Firmware version display; a lost connection (cable unplugged, board reset) is detected automatically
 - Live device log, optional hiding of TX monitor output
 - Manual command line for any console command
 
@@ -203,7 +291,7 @@ Pins and fixed parameters are defined at the top of [`code/Beacon/Beacon.c`](cod
 #define WATCHDOG_MS       3000 // Watchdog timeout, ms
 ```
 
-The PTT and CW key outputs are always **active high** (logic 1 while transmitting / keyed) — this is fixed in the firmware, no configuration needed.
+The PTT and CW key GPIOs are always **active high** (logic 1 while transmitting / keyed) — this is fixed in the firmware, no configuration needed. On the controller board they drive the open-collector transistors, so J1 `PTT_OUT` / `CW_OUT` are closed to ground while active.
 
 ## License
 
